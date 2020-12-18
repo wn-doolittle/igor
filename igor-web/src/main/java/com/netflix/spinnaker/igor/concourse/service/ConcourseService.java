@@ -273,7 +273,15 @@ public class ConcourseService implements BuildOperations, BuildProperties {
             .stream()
             .collect(toMap(BuildResources.BuildResource::getName, Function.identity()));
 
+    Map<String, Resource> planResourcesByName = new HashMap<>();
     resources
+        .values()
+        .forEach(
+            resource -> {
+              planResourcesByName.put(resource.getName(), resource);
+            });
+
+    planResourcesByName
         .values()
         .forEach(
             resource -> {
