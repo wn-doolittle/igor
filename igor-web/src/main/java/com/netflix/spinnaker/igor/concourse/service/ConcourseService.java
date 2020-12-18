@@ -20,6 +20,7 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
 import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.reducing;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
@@ -31,10 +32,11 @@ import com.netflix.spinnaker.igor.build.model.GenericGitRevision;
 import com.netflix.spinnaker.igor.build.model.JobConfiguration;
 import com.netflix.spinnaker.igor.concourse.client.ConcourseClient;
 import com.netflix.spinnaker.igor.concourse.client.model.Build;
-import com.netflix.spinnaker.igor.concourse.client.model.Event;
+import com.netflix.spinnaker.igor.concourse.client.model.BuildResources;
 import com.netflix.spinnaker.igor.concourse.client.model.Job;
 import com.netflix.spinnaker.igor.concourse.client.model.Pipeline;
 import com.netflix.spinnaker.igor.concourse.client.model.Resource;
+import com.netflix.spinnaker.igor.concourse.client.model.ResourceVersion;
 import com.netflix.spinnaker.igor.concourse.client.model.Team;
 import com.netflix.spinnaker.igor.config.ConcourseProperties;
 import com.netflix.spinnaker.igor.model.BuildServiceProvider;
@@ -51,15 +53,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.Disposable;
-import reactor.core.publisher.Flux;
 
 @Slf4j
 public class ConcourseService implements BuildOperations, BuildProperties {
@@ -177,7 +176,8 @@ public class ConcourseService implements BuildOperations, BuildProperties {
       return build;
     }
 
-    Collection<Resource> resources = getResources(job.getTeamName(), job.getPipelineName(), b.getId());
+    Collection<Resource> resources =
+        getResources(job.getTeamName(), job.getPipelineName(), b.getId());
 
     // merge input and output metadata into one map for each resource
     Map<String, Map<String, String>> mergedMetadataByResourceName =
@@ -255,7 +255,7 @@ public class ConcourseService implements BuildOperations, BuildProperties {
             .collect(toMap(Resource::getId, Function.identity()));
 
     if (!resources.isEmpty()) {
-      setResourceMetadata(buildId, resources);
+      setResourceMetadata(teamName, pipelineName, buildId, resources);
     } else {
       log.warn("No resources retrieved for buildId: {}", buildId);
     }
@@ -264,29 +264,41 @@ public class ConcourseService implements BuildOperations, BuildProperties {
   }
 
   /** Uses Concourse's build event stream to locate and populate resource metadata */
-  private void setResourceMetadata(String teamName, String pipelineName, String buildId, 
-      Map<String, Resource> resources) {
-    Map<String, BuildResources.BuildResource> buildResources = client.getBuildService().buildResources(buildId)
-      .getOutputs().stream()
-      .collect(toMap(BuildResources.BuildResource::getName, Function.identity()));
+  private void setResourceMetadata(
+      String teamName, String pipelineName, String buildId, Map<String, Resource> resources) {
+    Map<String, BuildResources.BuildResource> buildResources =
+        Optional.ofNullable(client.getBuildService().buildResources(buildId))
+            .map(BuildResources::getOutputs)
+            .orElse(emptyList())
+            .stream()
+            .collect(toMap(BuildResources.BuildResource::getName, Function.identity()));
 
-    resources.forEach(resource -> {
-      BuildResources.BuildResource buildResource = buildResources.get(resource.getName());
+    resources
+        .values()
+        .forEach(
+            resource -> {
+              BuildResources.BuildResource buildResource = buildResources.get(resource.getName());
 
-      if(buildResource != null){
-        String filter = buildResource.getVersion().entrySet().stream()
-          .map(entry -> entry.getKey() + ":" + entry.getValue())
-          collect(Collectors.joining());
+              if (buildResource != null) {
+                String filter =
+                    buildResource.getVersion().entrySet().stream()
+                        .map(entry -> entry.getKey() + ":" + entry.getValue())
+                        .collect(joining());
 
-        Collection<ResourceVersion> resourceVersions = client.getResourceService()
-          .resourceVersions(teamName, pipelineName, resource.getName(), filter);
+                log.debug("Get resource version: {}, {}", resource.getName(), filter);
+                Collection<ResourceVersion> resourceVersions =
+                    client
+                        .getResourceService()
+                        .resourceVersions(teamName, pipelineName, resource.getName(), filter);
 
-        if(resourceVersions.size() > 0) {
-          resource.setMetadata(resourceVersions.get(0).getMetadata());
-          log.debug("Set resource metadata: {}", resource);
-        }
-      }
-    });
+                if (resourceVersions != null && resourceVersions.size() > 0) {
+                  resource.setMetadata(resourceVersions.iterator().next().getMetadata());
+                  log.debug("Set resource metadata: {}", resource);
+                } else {
+                  log.debug("No resource version found: {}", resource);
+                }
+              }
+            });
   }
 
   private void parseAndDecorateArtifacts(GenericBuild build, Collection<Resource> resources) {
@@ -337,11 +349,8 @@ public class ConcourseService implements BuildOperations, BuildProperties {
 
     return client
         .getBuildService()
-        .builds(
-            job.getTeamName(),
-            job.getPipelineName(),
-            job.getName(),
-            Integer.toString(buildNumber));
+        .build(
+            job.getTeamName(), job.getPipelineName(), job.getName(), Integer.toString(buildNumber));
   }
 
   public List<Build> getBuilds(String jobPath, @Nullable Long since) {

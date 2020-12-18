@@ -1,9 +1,9 @@
 package com.netflix.spinnaker.igor.concourse.client.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import java.util.HashMap;
+import static java.util.stream.Collectors.toMap;
+
+import java.util.List;
 import java.util.Map;
-import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
@@ -15,12 +15,11 @@ public class ResourceVersion {
   @Getter private Map<String, String> version;
   @Getter private boolean enabled;
 
-  @Nullable private List<Map<String, String>> metadata;
+  private List<Map<String, String>> metadata;
 
-  @Nullable
   public Map<String, String> getMetadata() {
     return metadata == null
         ? null
-        : metadata.stream().collect(Collectors.toMap(m -> m.get("name"), m -> m.get("value")));
+        : metadata.stream().collect(toMap(m -> m.get("name"), m -> m.get("value")));
   }
 }

@@ -32,9 +32,12 @@ import com.netflix.spinnaker.igor.concourse.ConcourseCache
 import com.netflix.spinnaker.igor.concourse.client.BuildService
 import com.netflix.spinnaker.igor.concourse.client.ConcourseClient
 import com.netflix.spinnaker.igor.concourse.client.EventService
+import com.netflix.spinnaker.igor.concourse.client.ResourceService
 import com.netflix.spinnaker.igor.concourse.client.model.Build
+import com.netflix.spinnaker.igor.concourse.client.model.BuildResources
 import com.netflix.spinnaker.igor.concourse.client.model.Event
 import com.netflix.spinnaker.igor.concourse.client.model.Plan
+import com.netflix.spinnaker.igor.concourse.client.model.ResourceVersion
 import com.netflix.spinnaker.igor.helpers.TestUtils
 import java.util.List
 import reactor.core.publisher.Flux;
@@ -51,7 +54,7 @@ class ConcourseServiceSpec extends Specification {
     BuildService buildService
 
     @Shared
-    EventService eventService
+    ResourceService resourceService;
 
     @Shared
     ObjectMapper mapper
@@ -68,11 +71,11 @@ class ConcourseServiceSpec extends Specification {
             .registerModule(new JavaTimeModule());
 
         buildService = Mock()
-        eventService = Mock()
+        resourceService = Mock()
 
         client = Mock()
         client.getBuildService() >> buildService
-        client.getEventService() >> eventService
+        client.getResourceService() >> resourceService
 
         artifactDecorator = Optional.of(new ArtifactDecorator([new DebDetailsDecorator(), new RpmDetailsDecorator()], null))
 
@@ -88,9 +91,11 @@ class ConcourseServiceSpec extends Specification {
 
     def "getGenericBuild(jobPath, buildNumber)"() {
         given:
-        buildService.builds('myteam', 'mypipeline', 'myjob', _, _) >> builds('49', '48.1', '48', '47')
-        buildService.plan(_) >> planFixture()
-        eventService.resourceEvents(_) >> eventFixture()
+        buildService.build('myteam', 'mypipeline', 'myjob', '48') >> builds('48.1')[0]
+        buildService.plan('48.1-id') >> planFixture()
+        buildService.buildResources('48.1-id') >> buildResourcesFixture()
+
+        resourceService.resourceVersions(_, _, _, _) >> { args -> resVerFixture(args[2], args[3]) }
 
         when:
         GenericBuild genericBuild = service.getGenericBuild('myteam/mypipeline/myjob', 48)
@@ -105,9 +110,11 @@ class ConcourseServiceSpec extends Specification {
 
     def "getGenericBuildMissingBranch(jobPath, buildNumber)"() {
         given:
-        buildService.builds('myteam', 'mypipeline', 'myjob', _, _) >> builds('49', '48.1', '48', '47')
-        buildService.plan(_) >> planFixtureNoBranch()
-        eventService.resourceEvents(_) >> eventFixtureNoBranch()
+        buildService.build('myteam', 'mypipeline', 'myjob', '48') >> builds('48.1')[0]
+        buildService.plan('48.1-id') >> planFixtureNoBranch()
+        buildService.buildResources('48.1-id') >> buildResourcesFixtureNoBranch()
+
+        resourceService.resourceVersions(_, _, _, _) >> { args -> resVerFixture(args[2], args[3]) }
 
         when:
         GenericBuild genericBuild = service.getGenericBuild('myteam/mypipeline/myjob', 48)
@@ -123,8 +130,8 @@ class ConcourseServiceSpec extends Specification {
     def "getBuilds(jobPath, since)"() {
         given:
         buildService.builds('myteam', 'mypipeline', 'myjob', _, 1421717251402) >> builds('49', '48.1', '48', '47')
-        buildService.plan(_) >> planFixture()
-        eventService.resourceEvents(_) >> eventFixture()
+//        buildService.plan(_) >> planFixture()
+//        eventService.resourceEvents(_) >> eventFixture()
 
         when:
         List<Build> builds = service.getBuilds('myteam/mypipeline/myjob', 1421717251402)
@@ -330,6 +337,314 @@ class ConcourseServiceSpec extends Specification {
         return mapper.readValue(planJson, Plan.class)
     }
 
+    private BuildResources buildResourcesFixture() {
+        def json = """\
+            {
+              "inputs": [
+                {
+                  "name": "common",
+                  "version": {
+                    "ref": "4d5a21b320e1a44075656daa42db6d49b0d989ce"
+                  },
+                  "pipeline_id": 156,
+                  "first_occurrence": false
+                },
+                {
+                  "name": "build-slug",
+                  "version": {
+                    "path": "build-slugs/gateway-service/gateway-service-slug-1.28.1.tgz"
+                  },
+                  "pipeline_id": 156,
+                  "first_occurrence": true
+                }
+              ],
+              "outputs": [
+                {
+                  "name": "repo",
+                  "version": {
+                    "ref": "f16f80615a204423824bc987b382e5ad0199b36c"
+                  }
+                },
+                {
+                  "name": "gateway-service-docker-image",
+                  "version": {
+                    "digest": "sha256:30bf1745fc5884469fb61f1652374e2f1befc9e937754a0b9914fe886111c96d"
+                  }
+                },
+                {
+                  "name": "gateway-service-deploy-yaml",
+                  "version": {
+                    "path": "artifacts/ala-user-api/deploy-1.0.278-b5d970f.yaml"
+                  }
+                },
+                {
+                  "name": "version",
+                  "version": {
+                    "number": "1.0.178"
+                  }
+                }
+              ]
+            }""".stripIndent()
+
+        return mapper.readValue(json, BuildResources.class)
+    }
+
+    private Collection<ResourceVersion> resVerFixture(String name, String filter) {
+        def fixtures = [
+            repo: [
+                'ref:f16f80615a204423824bc987b382e5ad0199b36c': """\
+                    [
+                        {
+                        "id": 59822754,
+                        "metadata": [
+                            {
+                                "name": "commit",
+                                "value": "f16f80615a204423824bc987b382e5ad0199b36c"
+                            },
+                            {
+                                "name": "author",
+                                "value": "Jared Stehler"
+                            },
+                            {
+                                "name": "author_date",
+                                "value": "2020-06-06 11:20:28 -0400"
+                            },
+                            {
+                                "name": "committer",
+                                "value": "Jared Stehler"
+                            },
+                            {
+                                "name": "committer_date",
+                                "value": "2020-06-06 11:20:28 -0400"
+                            },
+                            {
+                                "name": "branch",
+                                "value": "master"
+                            },
+                            {
+                                "name": "message",
+                                "value": "temp fix\\n"
+                            },
+                            {
+                                "name": "url",
+                                "value": "https://github.com/myteam/common/commit/f16f80615a204423824bc987b382e5ad0199b36c"
+                            }
+                        ],
+                        "version": {
+                          "ref": "f16f80615a204423824bc987b382e5ad0199b36c"
+                        },
+                        "enabled": true
+                        }
+                    ]
+                """,
+                'ref:b2a18347d4669c25ab23f626edea622ec8ffe7aa': """\
+                    [
+                        {
+                        "id": 59822754,
+                        "metadata": [
+                            {
+                                "name": "commit",
+                                "value": "b2a18347d4669c25ab23f626edea622ec8ffe7aa"
+                            },
+                            {
+                                "name": "author",
+                                "value": "Jared Stehler"
+                            },
+                            {
+                                "name": "author_date",
+                                "value": "2020-07-25 17:58:28 -0400"
+                            },
+                            {
+                                "name": "committer",
+                                "value": "Jared Stehler"
+                            },
+                            {
+                                "name": "committer_date",
+                                "value": "2020-07-25 17:58:28 -0400"
+                            },
+                            {
+                                "name": "message",
+                                "value": "[DOOL-2652] upgrade k8s to 1.17.9\\n"
+                            },
+                            {
+                                "name": "url",
+                                "value": "https://github.com/myteam/cloud/commit/b2a18347d4669c25ab23f626edea622ec8ffe7aa"
+                            }
+                        ],
+                        "version": {
+                          "ref": "b2a18347d4669c25ab23f626edea622ec8ffe7aa"
+                        },
+                        "enabled": true
+                        }
+                    ]
+                """
+            ],
+            version: [
+                'number:1.0.178': """\
+                    [
+                      {
+                        "id": 96255536,
+                        "metadata": [
+                          {
+                            "name": "number",
+                            "value": "1.0.178"
+                          }
+                        ],
+                        "version": {
+                          "number": "1.0.178"
+                        },
+                        "enabled": true
+                      }
+                    ]
+                """,
+                'number:1.0.41': """\
+                    [
+                      {
+                        "id": 96255536,
+                        "metadata": [
+                          {
+                            "name": "number",
+                            "value": "1.0.41"
+                          }
+                        ],
+                        "version": {
+                          "number": "1.0.41"
+                        },
+                        "enabled": true
+                      }
+                    ]
+                """,
+            ],
+            'gateway-service-docker-image': [
+                'digest:sha256:30bf1745fc5884469fb61f1652374e2f1befc9e937754a0b9914fe886111c96d': """\
+                    [
+                      {
+                        "id": 96257550,
+                        "metadata": [
+                          {
+                            "name": "repository",
+                            "value": "123456789000.dkr.ecr.us-west-2.amazonaws.com/gateway-service"
+                          },
+                          {
+                            "name": "tag",
+                            "value": "latest"
+                          },
+                          {
+                            "name": "image",
+                            "value": "sha256:81dcf"
+                          }
+                        ],
+                        "version": {
+                          "digest": "sha256:30bf1745fc5884469fb61f1652374e2f1befc9e937754a0b9914fe886111c96d"
+                        },
+                        "enabled": true
+                      }
+                    ]
+                """
+            ],
+            'gateway-service-deploy-yaml': [
+                'path:artifacts/gateway-service/deploy-1.0.178-65a7c12.yaml': """\
+                    [
+                      {
+                        "id": 96257959,
+                        "metadata": [
+                            {
+                                "name": "filename",
+                                "value": "deploy-1.0.178-65a7c12.yaml"
+                            },
+                            {
+                                "name": "url",
+                                "value": "https://s3-us-west-2.amazonaws.com/artifacts-bucket/artifacts/gateway-service/deploy-1.0.178-65a7c12.yaml"
+                            }
+                        ],
+                        "version": {
+                          "path": "artifacts/gateway-service/deploy-1.0.178-65a7c12.yaml"
+                        },
+                        "enabled": true
+                      }
+                    ]
+                """,
+            ],
+            'nonprod-cluster-spec': [
+                'path:artifacts/kops/nonprod/nonprod-cluster-spec-1.0.41-b2a1834.yaml': """\
+                    [
+                      {
+                        "id": 96257959,
+                        "metadata": [
+                            {
+                                "name": "filename",
+                                "value": "nonprod-cluster-spec-1.0.41-b2a1834.yaml"
+                            },
+                            {
+                                "name": "url",
+                                "value": "https://s3-us-west-2.amazonaws.com/artifacts-bucket/artifacts/kops/nonprod/nonprod-cluster-spec-1.0.41-b2a1834.yaml"
+                            }
+                        ],
+                        "version": {
+                          "path": "artifacts/kops/nonprod/nonprod-cluster-spec-1.0.41-b2a1834.yaml"
+                        },
+                        "enabled": true
+                      }
+                    ]
+                """,
+            ],
+            'prod-cluster-spec': [
+                'path:artifacts/kops/prod/prod-cluster-spec-1.0.41-b2a1834.yaml': """\
+                    [
+                      {
+                        "id": 96257959,
+                        "metadata": [
+                            {
+                                "name": "filename",
+                                "value": "prod-cluster-spec-1.0.41-b2a1834.yaml"
+                            },
+                            {
+                                "name": "url",
+                                "value": "https://s3-us-west-2.amazonaws.com/artifacts-bucket/artifacts/kops/prod/prod-cluster-spec-1.0.41-b2a1834.yaml"
+                            }
+                        ],
+                        "version": {
+                          "path": "artifacts/kops/prod/prod-cluster-spec-1.0.41-b2a1834.yaml"
+                        },
+                        "enabled": true
+                      }
+                    ]
+                """,
+            ],
+            'ops-cluster-spec': [
+                'path:artifacts/kops/ops/ops-cluster-spec-1.0.41-b2a1834.yaml': """\
+                    [
+                      {
+                        "id": 96257959,
+                        "metadata": [
+                            {
+                                "name": "filename",
+                                "value": "ops-cluster-spec-1.0.41-b2a1834.yaml"
+                            },
+                            {
+                                "name": "url",
+                                "value": "https://s3-us-west-2.amazonaws.com/artifacts-bucket/artifacts/kops/ops/ops-cluster-spec-1.0.41-b2a1834.yaml"
+                            }
+                        ],
+                        "version": {
+                          "path": "artifacts/kops/ops/ops-cluster-spec-1.0.41-b2a1834.yaml"
+                        },
+                        "enabled": true
+                      }
+                    ]
+                """
+            ]
+        ]
+
+        def fixture = fixtures[name][filter]
+
+        if(fixture == null) {
+            return []
+        }
+
+        def resVer = mapper.readValue(fixture.stripIndent(), new TypeReference<List<ResourceVersion>>(){})
+    }
+
     private Flux<Event> eventFixture() throws Exception {
         def eventsJson = '''[\
             {"data":{"origin":{"id":"5ed14561"},"time":1591654781,"exit_status":0,"version":{"ref":"f16f80615a204423824bc987b382e5ad0199b36c"},"metadata":[{"name":"commit","value":"f16f80615a204423824bc987b382e5ad0199b36c"},{"name":"author","value":"Jared Stehler"},{"name":"author_date","value":"2020-06-06 11:20:28 -0400"},{"name":"committer","value":"Jared Stehler"},{"name":"committer_date","value":"2020-06-06 11:20:28 -0400"},{"name":"branch","value":"master"},{"name":"message","value":"temp fix\\n"},{"name":"url","value":"https://github.com/myteam/common/commit/f16f80615a204423824bc987b382e5ad0199b36c"}]},"event":"finish-get","version":"5.1"},
@@ -475,6 +790,64 @@ class ConcourseServiceSpec extends Specification {
             }""".stripIndent()
 
         return mapper.readValue(planJson, Plan.class)
+    }
+
+    private BuildResources buildResourcesFixtureNoBranch() {
+        def json = """\
+            {
+              "inputs": [
+                {
+                  "name": "common",
+                  "version": {
+                    "ref": "4d5a21b320e1a44075656daa42db6d49b0d989ce"
+                  },
+                  "pipeline_id": 156,
+                  "first_occurrence": false
+                },
+                {
+                  "name": "build-slug",
+                  "version": {
+                    "path": "build-slugs/edgenuity-armstrong-ala-user/edgenuity-armstrong-ala-user-slug-1.28.1.tgz"
+                  },
+                  "pipeline_id": 156,
+                  "first_occurrence": true
+                }
+              ],
+              "outputs": [
+                {
+                  "name": "repo",
+                  "version": {
+                    "ref": "b2a18347d4669c25ab23f626edea622ec8ffe7aa"
+                  }
+                },
+                {
+                  "name": "nonprod-cluster-spec",
+                  "version": {
+                    "path": "artifacts/ala-user-api/deploy-1.0.278-b5d970f.yaml"
+                  }
+                },
+                {
+                  "name": "prod-cluster-spec",
+                  "version": {
+                    "path": "artifacts/ala-user-api/deploy-1.0.278-b5d970f.yaml"
+                  }
+                },
+                {
+                  "name": "ops-cluster-spec",
+                  "version": {
+                    "path": "artifacts/ala-user-api/deploy-1.0.278-b5d970f.yaml"
+                  }
+                },
+                {
+                  "name": "version",
+                  "version": {
+                    "number": "1.0.41"
+                  }
+                }
+              ]
+            }""".stripIndent()
+
+        return mapper.readValue(json, BuildResources.class)
     }
 
     private Flux<Event> eventFixtureNoBranch() throws Exception {
