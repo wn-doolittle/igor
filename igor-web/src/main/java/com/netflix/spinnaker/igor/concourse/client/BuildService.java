@@ -19,7 +19,6 @@ package com.netflix.spinnaker.igor.concourse.client;
 import com.netflix.spinnaker.igor.concourse.client.model.Build;
 import com.netflix.spinnaker.igor.concourse.client.model.BuildResources;
 import com.netflix.spinnaker.igor.concourse.client.model.Plan;
-import java.util.Collection;
 import java.util.List;
 import retrofit.http.GET;
 import retrofit.http.Path;
