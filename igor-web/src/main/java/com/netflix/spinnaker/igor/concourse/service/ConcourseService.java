@@ -146,10 +146,7 @@ public class ConcourseService implements BuildOperations, BuildProperties {
   @Nullable
   @Override
   public GenericBuild getGenericBuild(String jobPath, int buildNumber) {
-    return getBuilds(jobPath, null).stream()
-        .filter(build -> build.getNumber() == buildNumber)
-        .sorted()
-        .findFirst()
+    return Optional.ofNullable(getBuild(jobPath, buildNumber))
         .map(build -> getGenericBuild(jobPath, build, true))
         .orElse(null);
   }
@@ -180,7 +177,7 @@ public class ConcourseService implements BuildOperations, BuildProperties {
       return build;
     }
 
-    Collection<Resource> resources = getResources(b.getId());
+    Collection<Resource> resources = getResources(job.getTeamName(), job.getPipelineName(), b.getId());
 
     // merge input and output metadata into one map for each resource
     Map<String, Map<String, String>> mergedMetadataByResourceName =
@@ -246,7 +243,7 @@ public class ConcourseService implements BuildOperations, BuildProperties {
     return build;
   }
 
-  private Collection<Resource> getResources(String buildId) {
+  private Collection<Resource> getResources(String teamName, String pipelineName, String buildId) {
     Map<String, Resource> resources =
         client.getBuildService().plan(buildId).getResources().stream()
             .filter(
@@ -267,37 +264,29 @@ public class ConcourseService implements BuildOperations, BuildProperties {
   }
 
   /** Uses Concourse's build event stream to locate and populate resource metadata */
-  private void setResourceMetadata(String buildId, Map<String, Resource> resources) {
-    Flux<Event> events = client.getEventService().resourceEvents(buildId);
-    CountDownLatch latch = new CountDownLatch(resources.size());
+  private void setResourceMetadata(String teamName, String pipelineName, String buildId, 
+      Map<String, Resource> resources) {
+    Map<String, BuildResources.BuildResource> buildResources = client.getBuildService().buildResources(buildId)
+      .getOutputs().stream()
+      .collect(toMap(BuildResources.BuildResource::getName, Function.identity()));
 
-    Disposable eventStream =
-        events
-            .doOnNext(
-                event -> {
-                  log.debug("Event for build {}: {}", buildId, event);
-                  Resource resource = resources.get(event.getResourceId());
-                  if (resource != null) {
-                    resource.setMetadata(event.getData().getMetadata());
-                    latch.countDown();
-                  }
-                })
-            .doOnComplete(
-                () -> {
-                  // if the event stream has ended, just count down the rest of the way
-                  while (latch.getCount() > 0) {
-                    latch.countDown();
-                  }
-                })
-            .subscribe();
+    resources.forEach(resource -> {
+      BuildResources.BuildResource buildResource = buildResources.get(resource.getName());
 
-    try {
-      latch.await();
-    } catch (InterruptedException e) {
-      log.warn("Unable to fully read event stream", e);
-    } finally {
-      eventStream.dispose();
-    }
+      if(buildResource != null){
+        String filter = buildResource.getVersion().entrySet().stream()
+          .map(entry -> entry.getKey() + ":" + entry.getValue())
+          collect(Collectors.joining());
+
+        Collection<ResourceVersion> resourceVersions = client.getResourceService()
+          .resourceVersions(teamName, pipelineName, resource.getName(), filter);
+
+        if(resourceVersions.size() > 0) {
+          resource.setMetadata(resourceVersions.get(0).getMetadata());
+          log.debug("Set resource metadata: {}", resource);
+        }
+      }
+    });
   }
 
   private void parseAndDecorateArtifacts(GenericBuild build, Collection<Resource> resources) {
@@ -337,6 +326,22 @@ public class ConcourseService implements BuildOperations, BuildProperties {
   @Override
   public JobConfiguration getJobConfig(String jobName) {
     throw new UnsupportedOperationException("getJobConfig is not yet implemented for Concourse");
+  }
+
+  public Build getBuild(String jobPath, int buildNumber) {
+    Job job = toJob(jobPath);
+
+    if (host.getTeams() != null && !host.getTeams().contains(job.getTeamName())) {
+      return null;
+    }
+
+    return client
+        .getBuildService()
+        .builds(
+            job.getTeamName(),
+            job.getPipelineName(),
+            job.getName(),
+            Integer.toString(buildNumber));
   }
 
   public List<Build> getBuilds(String jobPath, @Nullable Long since) {

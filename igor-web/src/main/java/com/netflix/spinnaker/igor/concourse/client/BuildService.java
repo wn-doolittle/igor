@@ -17,7 +17,9 @@
 package com.netflix.spinnaker.igor.concourse.client;
 
 import com.netflix.spinnaker.igor.concourse.client.model.Build;
+import com.netflix.spinnaker.igor.concourse.client.model.BuildResources;
 import com.netflix.spinnaker.igor.concourse.client.model.Plan;
+import java.util.Collection;
 import java.util.List;
 import retrofit.http.GET;
 import retrofit.http.Path;
@@ -32,6 +34,16 @@ public interface BuildService {
       @Query("limit") Integer limit,
       @Query("since") Long since);
 
+  @GET("/api/v1/teams/{team}/pipelines/{pipeline}/jobs/{job}/builds/{build}")
+  Build build(
+      @Path("team") String team,
+      @Path("pipeline") String pipeline,
+      @Path("job") String job,
+      @Path("build") String buildNumber);
+
   @GET("/api/v1/builds/{id}/plan")
   Plan plan(@Path("id") String id);
+
+  @GET("/api/v1/builds/{id}/resources")
+  BuildResources buildResources(@Path("id") String id);
 }

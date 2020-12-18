@@ -17,11 +17,20 @@
 package com.netflix.spinnaker.igor.concourse.client;
 
 import com.netflix.spinnaker.igor.concourse.client.model.Resource;
+import com.netflix.spinnaker.igor.concourse.client.model.ResourceVersion;
 import java.util.Collection;
 import retrofit.http.GET;
 import retrofit.http.Path;
+import retrofit.http.Query;
 
 public interface ResourceService {
   @GET("/api/v1/teams/{team}/pipelines/{pipeline}/resources")
   Collection<Resource> resources(@Path("team") String team, @Path("pipeline") String pipeline);
+
+  @GET("/api/v1/teams/{team}/pipelines/{pipeline}/resources/{resource}/versions")
+  Collection<ResourceVersion> resourceVersions(
+      @Path("team") String team,
+      @Path("pipeline") String pipeline,
+      @Path("resource") String resource,
+      @Query("filter") String filter);
 }
