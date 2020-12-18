@@ -308,7 +308,7 @@ public class ConcourseService implements BuildOperations, BuildProperties {
 
   private List<GenericArtifact> getArtifactsFromResources(Collection<Resource> resources) {
     return resources.stream()
-        .map(r -> r.getMetadata().get("url"))
+        .map(r -> Optional.ofNullable(r.getMetadata()).map(m -> m.get("url")).orElse(null))
         .filter(Objects::nonNull)
         .map(ConcourseService::translateS3HttpUrl)
         .map(url -> new GenericArtifact(url, url, url))
