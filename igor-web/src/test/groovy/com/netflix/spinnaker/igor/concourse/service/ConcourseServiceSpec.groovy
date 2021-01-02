@@ -54,7 +54,10 @@ class ConcourseServiceSpec extends Specification {
     BuildService buildService
 
     @Shared
-    ResourceService resourceService;
+    EventService eventService
+
+    @Shared
+    ResourceService resourceService
 
     @Shared
     ObjectMapper mapper
@@ -71,10 +74,12 @@ class ConcourseServiceSpec extends Specification {
             .registerModule(new JavaTimeModule());
 
         buildService = Mock()
+        eventService = Mock()
         resourceService = Mock()
 
         client = Mock()
         client.getBuildService() >> buildService
+        client.getEventService() >> eventService
         client.getResourceService() >> resourceService
 
         artifactDecorator = Optional.of(new ArtifactDecorator([new DebDetailsDecorator(), new RpmDetailsDecorator()], null))
@@ -391,6 +396,53 @@ class ConcourseServiceSpec extends Specification {
 
     private Collection<ResourceVersion> resVerFixture(String name, String filter) {
         def fixtures = [
+            common: [
+                'ref:4d5a21b320e1a44075656daa42db6d49b0d989ce': """\
+                    [
+                        {
+                        "id": 59822754,
+                        "metadata": [
+                            {
+                                "name": "commit",
+                                "value": "4d5a21b320e1a44075656daa42db6d49b0d989ce"
+                            },
+                            {
+                                "name": "author",
+                                "value": "Jared Stehler"
+                            },
+                            {
+                                "name": "author_date",
+                                "value": "2020-06-06 11:20:28 -0400"
+                            },
+                            {
+                                "name": "committer",
+                                "value": "Jared Stehler"
+                            },
+                            {
+                                "name": "committer_date",
+                                "value": "2020-06-06 11:20:28 -0400"
+                            },
+                            {
+                                "name": "branch",
+                                "value": "master"
+                            },
+                            {
+                                "name": "message",
+                                "value": "temp fix\\n"
+                            },
+                            {
+                                "name": "url",
+                                "value": "https://github.com/myteam/common/commit/4d5a21b320e1a44075656daa42db6d49b0d989ce"
+                            }
+                        ],
+                        "version": {
+                          "ref": "4d5a21b320e1a44075656daa42db6d49b0d989ce"
+                        },
+                        "enabled": true
+                        }
+                    ]
+                """
+            ],
             repo: [
                 'ref:f16f80615a204423824bc987b382e5ad0199b36c': """\
                     [
@@ -536,6 +588,29 @@ class ConcourseServiceSpec extends Specification {
                         ],
                         "version": {
                           "digest": "sha256:30bf1745fc5884469fb61f1652374e2f1befc9e937754a0b9914fe886111c96d"
+                        },
+                        "enabled": true
+                      }
+                    ]
+                """
+            ],
+            'build-slug': [
+                'path:build-slugs/edgenuity-armstrong-ala-user/edgenuity-armstrong-ala-user-slug-1.28.1.tgz': """\
+                    [
+                      {
+                        "id": 96257959,
+                        "metadata": [
+                            {
+                                "name": "filename",
+                                "value": "edgenuity-armstrong-ala-user-slug-1.28.1.tgz"
+                            },
+                            {
+                                "name": "url",
+                                "value": "https://s3-us-west-2.amazonaws.com/artifacts-bucket/build-slugs/edgenuity-armstrong-ala-user/edgenuity-armstrong-ala-user-slug-1.28.1.tgz"
+                            }
+                        ],
+                        "version": {
+                          "path": "build-slugs/edgenuity-armstrong-ala-user/edgenuity-armstrong-ala-user-slug-1.28.1.tgz"
                         },
                         "enabled": true
                       }

@@ -25,6 +25,7 @@ import static java.util.stream.Collectors.reducing;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 
+import com.google.common.collect.ImmutableSet;
 import com.netflix.spinnaker.fiat.model.resources.Permissions;
 import com.netflix.spinnaker.igor.build.model.GenericArtifact;
 import com.netflix.spinnaker.igor.build.model.GenericBuild;
@@ -33,6 +34,7 @@ import com.netflix.spinnaker.igor.build.model.JobConfiguration;
 import com.netflix.spinnaker.igor.concourse.client.ConcourseClient;
 import com.netflix.spinnaker.igor.concourse.client.model.Build;
 import com.netflix.spinnaker.igor.concourse.client.model.BuildResources;
+import com.netflix.spinnaker.igor.concourse.client.model.Event;
 import com.netflix.spinnaker.igor.concourse.client.model.Job;
 import com.netflix.spinnaker.igor.concourse.client.model.Pipeline;
 import com.netflix.spinnaker.igor.concourse.client.model.Resource;
@@ -53,12 +55,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
 
 @Slf4j
 public class ConcourseService implements BuildOperations, BuildProperties {
@@ -263,50 +269,97 @@ public class ConcourseService implements BuildOperations, BuildProperties {
     return resources.values();
   }
 
-  /** Uses Concourse's build event stream to locate and populate resource metadata */
+  /** Uses Concourse's pipeline resource versions API to locate and populate resource metadata */
   private void setResourceMetadata(
       String teamName, String pipelineName, String buildId, Map<String, Resource> resources) {
     Map<String, BuildResources.BuildResource> buildResources =
         Optional.ofNullable(client.getBuildService().buildResources(buildId))
-            .map(BuildResources::getOutputs)
+            .map(BuildResources::getAll)
             .orElse(emptyList())
             .stream()
             .collect(toMap(BuildResources.BuildResource::getName, Function.identity()));
 
+    // TODO extract to config
+    Set<String> resourceTypes = ImmutableSet.of("docker-image", "git", "s3", "semver");
+
     Map<String, Resource> planResourcesByName = new HashMap<>();
-    resources
-        .values()
+    resources.values().stream()
+        .filter(resource -> resourceTypes.contains(resource.getType()))
         .forEach(
             resource -> {
               planResourcesByName.put(resource.getName(), resource);
             });
 
-    planResourcesByName
-        .values()
-        .forEach(
-            resource -> {
-              BuildResources.BuildResource buildResource = buildResources.get(resource.getName());
+    if (buildResources.keySet().containsAll(planResourcesByName.keySet())) {
+      planResourcesByName
+          .values()
+          .forEach(
+              resource -> {
+                BuildResources.BuildResource buildResource = buildResources.get(resource.getName());
 
-              if (buildResource != null) {
-                String filter =
-                    buildResource.getVersion().entrySet().stream()
-                        .map(entry -> entry.getKey() + ":" + entry.getValue())
-                        .collect(joining());
+                if (buildResource != null) {
+                  String filter =
+                      buildResource.getVersion().entrySet().stream()
+                          .map(entry -> entry.getKey() + ":" + entry.getValue())
+                          .collect(joining());
 
-                log.debug("Get resource version: {}, {}", resource.getName(), filter);
-                Collection<ResourceVersion> resourceVersions =
-                    client
-                        .getResourceService()
-                        .resourceVersions(teamName, pipelineName, resource.getName(), filter);
+                  log.debug("Get resource version: {}, {}", resource.getName(), filter);
+                  Collection<ResourceVersion> resourceVersions =
+                      client
+                          .getResourceService()
+                          .resourceVersions(teamName, pipelineName, resource.getName(), filter);
 
-                if (resourceVersions != null && resourceVersions.size() > 0) {
-                  resource.setMetadata(resourceVersions.iterator().next().getMetadata());
-                  log.debug("Set resource metadata: {}", resource);
-                } else {
-                  log.debug("No resource version found: {}", resource);
+                  if (resourceVersions != null && resourceVersions.size() > 0) {
+                    resource.setMetadata(resourceVersions.iterator().next().getMetadata());
+                    log.debug("Set resource metadata: {}", resource);
+                  } else {
+                    log.debug("No resource version found: {}", resource);
+                  }
                 }
-              }
-            });
+              });
+
+    } else {
+      log.info(
+          "Build resources [{}] doesn't contain all from plan resources [{}]",
+          buildResources.keySet(),
+          planResourcesByName.keySet());
+
+      setResourceMetadataFromEventStream(buildId, resources);
+    }
+  }
+
+  /** Uses Concourse's build event stream to locate and populate resource metadata */
+  private void setResourceMetadataFromEventStream(String buildId, Map<String, Resource> resources) {
+    Flux<Event> events = client.getEventService().resourceEvents(buildId);
+    CountDownLatch latch = new CountDownLatch(resources.size());
+
+    Disposable eventStream =
+        events
+            .doOnNext(
+                event -> {
+                  log.debug("Event for build {}: {}", buildId, event);
+                  Resource resource = resources.get(event.getResourceId());
+                  if (resource != null) {
+                    resource.setMetadata(event.getData().getMetadata());
+                    latch.countDown();
+                  }
+                })
+            .doOnComplete(
+                () -> {
+                  // if the event stream has ended, just count down the rest of the way
+                  while (latch.getCount() > 0) {
+                    latch.countDown();
+                  }
+                })
+            .subscribe();
+
+    try {
+      latch.await();
+    } catch (InterruptedException e) {
+      log.warn("Unable to fully read event stream", e);
+    } finally {
+      eventStream.dispose();
+    }
   }
 
   private void parseAndDecorateArtifacts(GenericBuild build, Collection<Resource> resources) {
