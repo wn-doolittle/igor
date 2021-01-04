@@ -277,7 +277,8 @@ public class ConcourseService implements BuildOperations, BuildProperties {
             .map(BuildResources::getAll)
             .orElse(emptyList())
             .stream()
-            .collect(toMap(BuildResources.BuildResource::getName, Function.identity()));
+            .collect(
+                toMap(BuildResources.BuildResource::getName, Function.identity(), (r1, r2) -> r2));
 
     // TODO extract to config
     Set<String> resourceTypes = ImmutableSet.of("docker-image", "git", "s3", "semver");
