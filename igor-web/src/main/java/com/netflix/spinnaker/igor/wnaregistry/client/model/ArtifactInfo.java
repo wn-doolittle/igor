@@ -5,7 +5,6 @@ import lombok.Data;
 @Data
 public class ArtifactInfo {
 
-    private String type;
-    private String url;
-
+  private String type;
+  private String url;
 }

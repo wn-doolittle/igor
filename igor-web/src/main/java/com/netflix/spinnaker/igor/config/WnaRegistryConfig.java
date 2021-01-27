@@ -1,10 +1,10 @@
 package com.netflix.spinnaker.igor.config;
 
 import com.netflix.spinnaker.igor.IgorConfigurationProperties;
-import com.netflix.spinnaker.igor.wnaregistry.WnaRegistryCache;
-import com.netflix.spinnaker.igor.wnaregistry.service.WnaRegistryService;
 import com.netflix.spinnaker.igor.service.ArtifactDecorator;
 import com.netflix.spinnaker.igor.service.BuildServices;
+import com.netflix.spinnaker.igor.wnaregistry.WnaRegistryCache;
+import com.netflix.spinnaker.igor.wnaregistry.service.WnaRegistryService;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;

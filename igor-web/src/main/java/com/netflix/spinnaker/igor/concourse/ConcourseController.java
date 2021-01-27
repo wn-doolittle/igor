@@ -26,14 +26,14 @@ import com.netflix.spinnaker.igor.service.BuildServices;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@ConditionalOnProperty("concourse.enabled")
+@ConditionalOnExpression("${concourse.enabled && !wnaregistry.enabled}")
 @RequestMapping("/concourse")
 public class ConcourseController {
   private final BuildServices buildServices;

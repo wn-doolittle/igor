@@ -1,13 +1,12 @@
 package com.netflix.spinnaker.igor.wnaregistry.client;
 
-import com.netflix.spinnaker.igor.wnaregistry.client.model.Team;
-import com.netflix.spinnaker.igor.wnaregistry.client.model.Pipeline;
 import com.netflix.spinnaker.igor.wnaregistry.client.model.Job;
+import com.netflix.spinnaker.igor.wnaregistry.client.model.Pipeline;
 import com.netflix.spinnaker.igor.wnaregistry.client.model.Resource;
+import com.netflix.spinnaker.igor.wnaregistry.client.model.Team;
 import java.util.List;
 import retrofit.http.GET;
 import retrofit.http.Path;
-import retrofit.http.Query;
 
 public interface ConcourseApiService {
   @GET("/api/v1/teams")
@@ -20,7 +19,5 @@ public interface ConcourseApiService {
   List<Job> jobs();
 
   @GET("/api/v1/teams/{team}/pipelines/{pipeline}/resources")
-  List<Resource> resources(
-      @Path("team") String team,
-      @Path("pipeline") String pipeline);
+  List<Resource> resources(@Path("team") String team, @Path("pipeline") String pipeline);
 }

@@ -18,19 +18,15 @@ package com.netflix.spinnaker.igor.wnaregistry.client;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.PropertyNamingStrategy;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.netflix.spinnaker.retrofit.Slf4jRetrofitLogger;
 import com.squareup.okhttp.OkHttpClient;
-import com.vdurmont.semver4j.Semver;
 import java.nio.charset.StandardCharsets;
-import java.time.ZonedDateTime;
 import java.util.Base64;
 import lombok.Getter;
 import retrofit.RequestInterceptor;
 import retrofit.RestAdapter;
 import retrofit.client.OkClient;
-import retrofit.client.Response;
 import retrofit.converter.JacksonConverter;
 
 public class WnaRegistryClient {
@@ -48,8 +44,12 @@ public class WnaRegistryClient {
       new RequestInterceptor() {
         @Override
         public void intercept(RequestFacade request) {
-          request.addHeader("Authorization",
-            "Basic " + Base64.getEncoder().encodeToString((user + ":" + password).getBytes(StandardCharsets.ISO_8859_1)));
+          request.addHeader(
+              "Authorization",
+              "Basic "
+                  + Base64.getEncoder()
+                      .encodeToString(
+                          (user + ":" + password).getBytes(StandardCharsets.ISO_8859_1)));
         }
       };
 

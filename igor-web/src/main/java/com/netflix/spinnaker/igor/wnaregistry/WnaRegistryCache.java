@@ -17,8 +17,8 @@
 package com.netflix.spinnaker.igor.wnaregistry;
 
 import com.netflix.spinnaker.igor.IgorConfigurationProperties;
-import com.netflix.spinnaker.igor.wnaregistry.client.model.Job;
 import com.netflix.spinnaker.igor.config.WnaRegistryProperties;
+import com.netflix.spinnaker.igor.wnaregistry.client.model.Job;
 import com.netflix.spinnaker.kork.jedis.RedisClientDelegate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

@@ -18,11 +18,11 @@ package com.netflix.spinnaker.igor.wnaregistry;
 
 import static java.util.Collections.emptyList;
 
+import com.netflix.spinnaker.igor.service.BuildServices;
 import com.netflix.spinnaker.igor.wnaregistry.client.model.Job;
 import com.netflix.spinnaker.igor.wnaregistry.client.model.Pipeline;
 import com.netflix.spinnaker.igor.wnaregistry.client.model.Team;
 import com.netflix.spinnaker.igor.wnaregistry.service.WnaRegistryService;
-import com.netflix.spinnaker.igor.service.BuildServices;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;

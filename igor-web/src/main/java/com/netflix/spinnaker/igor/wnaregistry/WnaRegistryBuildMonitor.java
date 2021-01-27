@@ -22,9 +22,6 @@ import com.netflix.spectator.api.Registry;
 import com.netflix.spinnaker.igor.IgorConfigurationProperties;
 import com.netflix.spinnaker.igor.build.model.GenericBuild;
 import com.netflix.spinnaker.igor.build.model.GenericProject;
-import com.netflix.spinnaker.igor.wnaregistry.client.model.BuildItem;
-import com.netflix.spinnaker.igor.wnaregistry.client.model.Job;
-import com.netflix.spinnaker.igor.wnaregistry.service.WnaRegistryService;
 import com.netflix.spinnaker.igor.config.WnaRegistryProperties;
 import com.netflix.spinnaker.igor.history.EchoService;
 import com.netflix.spinnaker.igor.history.model.GenericBuildContent;
@@ -35,18 +32,16 @@ import com.netflix.spinnaker.igor.polling.LockService;
 import com.netflix.spinnaker.igor.polling.PollContext;
 import com.netflix.spinnaker.igor.polling.PollingDelta;
 import com.netflix.spinnaker.igor.service.BuildServices;
+import com.netflix.spinnaker.igor.wnaregistry.client.model.BuildItem;
+import com.netflix.spinnaker.igor.wnaregistry.client.model.Job;
+import com.netflix.spinnaker.igor.wnaregistry.service.WnaRegistryService;
 import com.netflix.spinnaker.kork.discovery.DiscoveryStatusListener;
 import com.netflix.spinnaker.kork.dynamicconfig.DynamicConfigService;
-import com.netflix.spinnaker.security.AuthenticatedRequest;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import javax.annotation.Nullable;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -119,20 +114,28 @@ public class WnaRegistryBuildMonitor
 
     ListMultimap<Job, BuildItem> buildsByJob = Multimaps.index(builds, BuildItem::getJobKey);
 
-    List<JobDelta> jobDeltas = buildsByJob.asMap().entrySet().stream()
-        .map(jobBuilds -> {
-            Date upperBound = new Date(lastBuildStamp);
-            long cursor = lastPollTs == null ? lastBuildStamp : lastPollTs;
-            Date lowerBound = new Date(cursor);
+    List<JobDelta> jobDeltas =
+        buildsByJob.asMap().entrySet().stream()
+            .map(
+                jobBuilds -> {
+                  Date upperBound = new Date(lastBuildStamp);
+                  long cursor = lastPollTs == null ? lastBuildStamp : lastPollTs;
+                  Date lowerBound = new Date(cursor);
 
-            return new JobDelta(host, jobBuilds.getKey(),
-              cursor, lowerBound, upperBound,
-              jobBuilds.getValue().stream()
-                  .filter(b -> !cache.getEventPosted(host, b.getJobKey(), cursor, b.getNumber()))
-                  .map(wnaRegistryService::getGenericBuild)
-                  .collect(Collectors.toList()));
-        })
-        .collect(Collectors.toList());
+                  return new JobDelta(
+                      host,
+                      jobBuilds.getKey(),
+                      cursor,
+                      lowerBound,
+                      upperBound,
+                      jobBuilds.getValue().stream()
+                          .filter(
+                              b ->
+                                  !cache.getEventPosted(host, b.getJobKey(), cursor, b.getNumber()))
+                          .map(wnaRegistryService::getGenericBuild)
+                          .collect(Collectors.toList()));
+                })
+            .collect(Collectors.toList());
 
     return new JobPollingDelta(host.getName(), jobDeltas);
   }

@@ -16,27 +16,15 @@
 
 package com.netflix.spinnaker.igor.wnaregistry.client;
 
-import com.squareup.okhttp.Interceptor;
 import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Response;
-import io.github.resilience4j.retry.Retry;
-import io.github.resilience4j.retry.RetryConfig;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.charset.Charset;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
-import java.time.Duration;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
-import okio.Buffer;
-import okio.BufferedSource;
 
 public class OkHttpClientBuilder {
   private static TrustManager[] trustAllCerts =
@@ -74,5 +62,4 @@ public class OkHttpClientBuilder {
     }
     return sslContext;
   }
-
 }

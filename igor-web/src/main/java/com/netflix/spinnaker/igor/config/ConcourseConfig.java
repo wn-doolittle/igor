@@ -12,13 +12,13 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import javax.validation.Valid;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@ConditionalOnProperty("concourse.enabled")
+@ConditionalOnExpression("${concourse.enabled && !wnaregistry.enabled}")
 @EnableConfigurationProperties(ConcourseProperties.class)
 public class ConcourseConfig {
   @Bean

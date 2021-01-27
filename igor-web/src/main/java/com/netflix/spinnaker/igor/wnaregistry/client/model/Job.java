@@ -17,8 +17,8 @@
 package com.netflix.spinnaker.igor.wnaregistry.client.model;
 
 import lombok.AllArgsConstructor;
-import lombok.NoArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
 @AllArgsConstructor
