@@ -37,6 +37,7 @@ import com.netflix.spinnaker.igor.wnaregistry.client.model.Job;
 import com.netflix.spinnaker.igor.wnaregistry.service.WnaRegistryService;
 import com.netflix.spinnaker.kork.discovery.DiscoveryStatusListener;
 import com.netflix.spinnaker.kork.dynamicconfig.DynamicConfigService;
+import com.netflix.spinnaker.security.AuthenticatedRequest;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
