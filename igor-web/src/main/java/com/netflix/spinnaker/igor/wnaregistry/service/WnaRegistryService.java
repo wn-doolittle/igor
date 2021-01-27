@@ -16,13 +16,9 @@
 
 package com.netflix.spinnaker.igor.wnaregistry.service;
 
-import static com.google.common.base.Strings.isNullOrEmpty;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
-import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.reducing;
 import static java.util.stream.Collectors.toList;
-import static java.util.stream.Collectors.toMap;
 
 import com.netflix.spinnaker.fiat.model.resources.Permissions;
 import com.netflix.spinnaker.igor.build.model.GenericArtifact;
@@ -30,6 +26,11 @@ import com.netflix.spinnaker.igor.build.model.GenericBuild;
 import com.netflix.spinnaker.igor.build.model.GenericGitRevision;
 import com.netflix.spinnaker.igor.build.model.JobConfiguration;
 import com.netflix.spinnaker.igor.build.model.Result;
+import com.netflix.spinnaker.igor.config.WnaRegistryProperties;
+import com.netflix.spinnaker.igor.model.BuildServiceProvider;
+import com.netflix.spinnaker.igor.service.ArtifactDecorator;
+import com.netflix.spinnaker.igor.service.BuildOperations;
+import com.netflix.spinnaker.igor.service.BuildProperties;
 import com.netflix.spinnaker.igor.wnaregistry.client.WnaRegistryClient;
 import com.netflix.spinnaker.igor.wnaregistry.client.model.ArtifactInfo;
 import com.netflix.spinnaker.igor.wnaregistry.client.model.BuildItem;
@@ -37,31 +38,19 @@ import com.netflix.spinnaker.igor.wnaregistry.client.model.Job;
 import com.netflix.spinnaker.igor.wnaregistry.client.model.Pipeline;
 import com.netflix.spinnaker.igor.wnaregistry.client.model.Resource;
 import com.netflix.spinnaker.igor.wnaregistry.client.model.Team;
-import com.netflix.spinnaker.igor.config.WnaRegistryProperties;
-import com.netflix.spinnaker.igor.model.BuildServiceProvider;
-import com.netflix.spinnaker.igor.service.ArtifactDecorator;
-import com.netflix.spinnaker.igor.service.BuildOperations;
-import com.netflix.spinnaker.igor.service.BuildProperties;
 import java.time.Instant;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.Disposable;
-import reactor.core.publisher.Flux;
 
 @Slf4j
 public class WnaRegistryService implements BuildOperations, BuildProperties {
@@ -95,7 +84,7 @@ public class WnaRegistryService implements BuildOperations, BuildProperties {
   }
 
   public String getMaster() {
-    return "concourse-" + host.getName()
+    return "concourse-" + host.getName();
   }
 
   @Override
@@ -145,9 +134,7 @@ public class WnaRegistryService implements BuildOperations, BuildProperties {
   @Nullable
   @Override
   public GenericBuild getGenericBuild(String jobPath, int buildNumber) {
-    return getBuild(jobPath, buildNumber)
-        .map(build -> getGenericBuild(build))
-        .orElse(null);
+    return getBuild(jobPath, buildNumber).map(build -> getGenericBuild(build)).orElse(null);
   }
 
   public GenericBuild getGenericBuild(BuildItem b) {
@@ -172,26 +159,28 @@ public class WnaRegistryService implements BuildOperations, BuildProperties {
             + b.getBuildId());
     build.setTimestamp(Long.toString(b.getBuildTimestamp()));
 
-    if(b.getGitInfo() != null) {
-        build.setGenericGitRevisions(
-            Collections.singletonList(
-                GenericGitRevision.builder()
-                    .committer(b.getGitInfo().getCommitter())
-                    .branch(b.getGitInfo().getBranch())
-                    .name(b.getGitInfo().getBranch())
-                    .message(b.getGitInfo().getMessage())
-                    .sha1(b.getGitInfo().getSha1())
-                    .timestamp(b.getGitInfo().getCommitterDate() == null ? null : 
-                        Instant.ofEpochMilli(b.getGitInfo().getCommitterDate()))
-                    .build()));
+    if (b.getGitInfo() != null) {
+      build.setGenericGitRevisions(
+          Collections.singletonList(
+              GenericGitRevision.builder()
+                  .committer(b.getGitInfo().getCommitter())
+                  .branch(b.getGitInfo().getBranch())
+                  .name(b.getGitInfo().getBranch())
+                  .message(b.getGitInfo().getMessage())
+                  .sha1(b.getGitInfo().getSha1())
+                  .timestamp(
+                      b.getGitInfo().getCommitterDate() == null
+                          ? null
+                          : Instant.ofEpochMilli(b.getGitInfo().getCommitterDate()))
+                  .build()));
     }
 
-//    if (!mergedMetadataByResourceName.isEmpty()) {
-//      build.setProperties(mergedMetadataByResourceName);
-//    }
+    //    if (!mergedMetadataByResourceName.isEmpty()) {
+    //      build.setProperties(mergedMetadataByResourceName);
+    //    }
 
-    if(b.getArtifacts() != null) {
-        parseAndDecorateArtifacts(build, b.getArtifacts());
+    if (b.getArtifacts() != null) {
+      parseAndDecorateArtifacts(build, b.getArtifacts());
     }
 
     return build;
@@ -233,11 +222,8 @@ public class WnaRegistryService implements BuildOperations, BuildProperties {
 
     return client
         .getBuildItemService()
-        .builds(
-            job.getTeamName(),
-            job.getPipelineName(),
-            job.getName())
-//            host.getBuildLookbackLimit(),
+        .builds(job.getTeamName(), job.getPipelineName(), job.getName())
+        //            host.getBuildLookbackLimit(),
         .stream()
         .sorted()
         .collect(
@@ -255,10 +241,7 @@ public class WnaRegistryService implements BuildOperations, BuildProperties {
   }
 
   public List<BuildItem> getBuilds(@Nullable Long since) {
-    return client
-        .getBuildItemService()
-        .builds(since)
-        .stream()
+    return client.getBuildItemService().builds(since).stream()
         .sorted()
         .collect(
             Collectors.toMap(
@@ -275,12 +258,14 @@ public class WnaRegistryService implements BuildOperations, BuildProperties {
       return Optional.empty();
     }
 
-    return Optional.ofNullable(client.getBuildItemService()
-        .build(
-            job.getTeamName(),
-            job.getPipelineName(),
-            job.getName(),
-            Integer.toString(buildNumber)));
+    return Optional.ofNullable(
+        client
+            .getBuildItemService()
+            .build(
+                job.getTeamName(),
+                job.getPipelineName(),
+                job.getName(),
+                Integer.toString(buildNumber)));
   }
 
   public List<String> getResourceNames(String team, String pipeline) {
@@ -302,5 +287,4 @@ public class WnaRegistryService implements BuildOperations, BuildProperties {
 
     return job;
   }
-
 }
