@@ -18,7 +18,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@ConditionalOnExpression("${concourse.enabled && !wnaregistry.enabled}")
+@ConditionalOnExpression("${concourse.enabled} and !${wnaregistry.enabled}")
 @EnableConfigurationProperties(ConcourseProperties.class)
 public class ConcourseConfig {
   @Bean

@@ -50,7 +50,7 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
 @Service
-@ConditionalOnExpression("${concourse.enabled && !wnaregistry.enabled}")
+@ConditionalOnExpression("${concourse.enabled} and !${wnaregistry.enabled}")
 @Slf4j
 public class ConcourseBuildMonitor
     extends CommonPollingMonitor<

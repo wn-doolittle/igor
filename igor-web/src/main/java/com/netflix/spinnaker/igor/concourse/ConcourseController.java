@@ -33,7 +33,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@ConditionalOnExpression("${concourse.enabled && !wnaregistry.enabled}")
+@ConditionalOnExpression("${concourse.enabled} and !${wnaregistry.enabled}")
 @RequestMapping("/concourse")
 public class ConcourseController {
   private final BuildServices buildServices;
