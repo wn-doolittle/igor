@@ -10,7 +10,7 @@ public interface BuildItemService {
   @GET("/api/v1/builds")
   List<BuildItem> builds(@Query("since") Long since);
 
-  @GET("/api/v1/teams/{team}/pipelines/{pipeline}/jobs/{job}/builds/{build}")
+  @GET("/api/v1/teams/{team}/pipelines/{pipeline}/jobs/{job}/builds")
   List<BuildItem> builds(
       @Path("team") String team, @Path("pipeline") String pipeline, @Path("job") String job);
 
