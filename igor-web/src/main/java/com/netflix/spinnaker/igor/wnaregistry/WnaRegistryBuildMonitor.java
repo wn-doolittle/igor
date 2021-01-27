@@ -196,9 +196,7 @@ public class WnaRegistryBuildMonitor
       GenericBuildEvent event = new GenericBuildEvent();
       event.setContent(content);
 
-      log.info("Would have sent event: {}", event);
-      // TODO once we want to cut-over
-      // AuthenticatedRequest.allowAnonymous(() -> echoService.get().postEvent(event));
+      AuthenticatedRequest.allowAnonymous(() -> echoService.get().postEvent(event));
     } else {
       log.warn("Cannot send build event notification: Echo is not configured");
       log.info("({}) unable to push event for :" + build.getFullDisplayName());
