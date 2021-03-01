@@ -195,7 +195,10 @@ public class WnaRegistryBuildMonitor
       long newCursor = jobDelta.getUpperBound().getTime();
 
       cache.setLastPollCycleTimestamp(jobDelta.getHost(), newCursor);
-      log.debug("setLastPollCycleTimestamp: {} -> {}", jobDelta.getCursor(), newCursor);
+      log.debug(
+          "setLastPollCycleTimestamp: {} -> {}",
+          new Date(jobDelta.getCursor()),
+          new Date(newCursor));
     }
   }
 
