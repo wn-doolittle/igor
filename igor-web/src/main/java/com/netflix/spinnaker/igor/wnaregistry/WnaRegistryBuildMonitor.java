@@ -45,6 +45,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.TaskScheduler;
@@ -98,20 +99,20 @@ public class WnaRegistryBuildMonitor
 
     WnaRegistryService wnaRegistryService = getService(host);
 
-    final Long lastPollTs = cache.getLastPollCycleTimestamp(host);
+    final Long lastPollTs = Optional.ofNullable(cache.getLastPollCycleTimestamp(host)).orElse(0L);
 
     List<BuildItem> builds = wnaRegistryService.getBuilds(lastPollTs);
 
-    long lastBuildStamp = builds.iterator().next().getBuildTimestamp();
-
-    if (lastPollTs == null && !igorProperties.getSpinnaker().getBuild().isHandleFirstBuilds()) {
-      cache.setLastPollCycleTimestamp(host, lastBuildStamp);
+    if (builds.isEmpty()) {
+      log.debug("lastPollTs: {}, no new builds found.", lastPollTs);
       return new JobPollingDelta(host.getName(), Collections.emptyList());
     }
 
-    if (!igorProperties.getSpinnaker().getBuild().isProcessBuildsOlderThanLookBackWindow()) {
-      builds = onlyInLookBackWindow(builds);
-    }
+    long lastBuildStamp = builds.stream().mapToLong(BuildItem::getBuildTimestamp).max().getAsLong();
+
+    Date upperBound = new Date(lastBuildStamp);
+    long cursor = lastPollTs == null ? lastBuildStamp : lastPollTs;
+    Date lowerBound = new Date(cursor);
 
     ListMultimap<Job, BuildItem> buildsByJob = Multimaps.index(builds, BuildItem::getJobKey);
 
@@ -119,9 +120,14 @@ public class WnaRegistryBuildMonitor
         buildsByJob.asMap().entrySet().stream()
             .map(
                 jobBuilds -> {
-                  Date upperBound = new Date(lastBuildStamp);
-                  long cursor = lastPollTs == null ? lastBuildStamp : lastPollTs;
-                  Date lowerBound = new Date(cursor);
+                  Optional<GenericBuild> latestJobBuild =
+                      jobBuilds.getValue().stream()
+                          .sorted((b1, b2) -> b2.compareTo(b1))
+                          .filter(
+                              b ->
+                                  !cache.getEventPosted(host, b.getJobKey(), cursor, b.getNumber()))
+                          .map(wnaRegistryService::getGenericBuild)
+                          .findFirst();
 
                   return new JobDelta(
                       host,
@@ -129,14 +135,13 @@ public class WnaRegistryBuildMonitor
                       cursor,
                       lowerBound,
                       upperBound,
-                      jobBuilds.getValue().stream()
-                          .filter(
-                              b ->
-                                  !cache.getEventPosted(host, b.getJobKey(), cursor, b.getNumber()))
-                          .map(wnaRegistryService::getGenericBuild)
-                          .collect(Collectors.toList()));
+                      latestJobBuild
+                          .map(b -> Collections.singletonList(b))
+                          .orElse(Collections.emptyList()));
                 })
             .collect(Collectors.toList());
+
+    log.debug("Generated jobDeltas: {}", jobDeltas);
 
     return new JobPollingDelta(host.getName(), jobDeltas);
   }
@@ -150,6 +155,9 @@ public class WnaRegistryBuildMonitor
         System.currentTimeMillis()
             - (getPollInterval()
                 + (igorProperties.getSpinnaker().getBuild().getLookBackWindowMins() * 60) * 1000);
+
+    log.debug("onlyInLookBackWindow(): lookbackDate: {}", lookbackDate);
+
     return builds.stream()
         .filter(b -> b.getBuildTimestamp() > lookbackDate)
         .collect(Collectors.toList());
@@ -157,23 +165,37 @@ public class WnaRegistryBuildMonitor
 
   @Override
   protected void commitDelta(JobPollingDelta delta, boolean sendEvents) {
-    for (JobDelta jobDelta : delta.items) {
-      for (GenericBuild build : jobDelta.getBuilds()) {
-        boolean eventPosted =
-            cache.getEventPosted(
-                jobDelta.getHost(), jobDelta.getJob(), jobDelta.getCursor(), build.getNumber());
-        if (!eventPosted && sendEvents) {
-          sendEventForBuild(jobDelta.getHost(), jobDelta.getJob(), build);
+    if (!delta.items.isEmpty()) {
+      for (JobDelta jobDelta : delta.items) {
+        for (GenericBuild build : jobDelta.getBuilds()) {
+          log.debug(
+              "eventPosted: {}, {}, {}, {}",
+              jobDelta.getHost(),
+              jobDelta.getJob(),
+              jobDelta.getCursor(),
+              build.getNumber());
+
+          boolean eventPosted =
+              cache.getEventPosted(
+                  jobDelta.getHost(), jobDelta.getJob(), jobDelta.getCursor(), build.getNumber());
+          if (!eventPosted && sendEvents) {
+            sendEventForBuild(jobDelta.getHost(), jobDelta.getJob(), build);
+          }
+          log.info(
+              "({}) caching build {} for : {}",
+              jobDelta.getHost().getName(),
+              build.getNumber(),
+              build.getFullDisplayName());
+          cache.setEventPosted(
+              jobDelta.getHost(), jobDelta.getJob(), jobDelta.getCursor(), build.getNumber());
         }
-        log.info(
-            "({}) caching build {} for : {}",
-            jobDelta.getHost().getName(),
-            build.getNumber(),
-            build.getFullDisplayName());
-        cache.setEventPosted(
-            jobDelta.getHost(), jobDelta.getJob(), jobDelta.getCursor(), build.getNumber());
       }
-      cache.setLastPollCycleTimestamp(jobDelta.getHost(), jobDelta.getCursor());
+
+      JobDelta jobDelta = delta.items.iterator().next();
+      long newCursor = jobDelta.getUpperBound().getTime();
+
+      cache.setLastPollCycleTimestamp(jobDelta.getHost(), newCursor);
+      log.debug("setLastPollCycleTimestamp: {} -> {}", jobDelta.getCursor(), newCursor);
     }
   }
 
@@ -219,8 +241,9 @@ public class WnaRegistryBuildMonitor
 
   @RequiredArgsConstructor
   @Getter
+  @ToString
   static class JobDelta implements DeltaItem {
-    private final WnaRegistryProperties.Host host;
+    @ToString.Exclude private final WnaRegistryProperties.Host host;
     private final Job job;
     private final Long cursor;
     private final Date lowerBound;
@@ -230,6 +253,7 @@ public class WnaRegistryBuildMonitor
 
   @RequiredArgsConstructor
   @Getter
+  @ToString
   static class JobPollingDelta implements PollingDelta<JobDelta> {
     private final String name;
     private final List<JobDelta> items;
